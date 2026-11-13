@@ -1,0 +1,6 @@
+# Lokale Liste echter Namen für den Fixture-Leak-Check, nie committen
+.claude/fixture-denylist.txt
+# Persönliche Claude-Code-Einstellungen
+.claude/settings.local.json
+# Python-Bytecode der Agent-Skripte
+__pycache__/

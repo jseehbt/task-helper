@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run --no-project python .claude/skills/implement-issue/scripts/issue.py *)",
+      "Bash(uv run --no-project python .claude/skills/review-branch/scripts/route_reviewers.py*)",
+      "Bash(uv run --no-project python .claude/skills/spec-sync/scripts/doc_targets.py*)",
+      "Bash(uv run --no-project python .claude/skills/add-source-adapter/scripts/adapter_coverage.py *)",
+      "Bash(uv run --no-project python .claude/skills/capture-fixture/scripts/fixture_check.py*)",
+      "Bash(uv run --no-project python .claude/skills/capture-fixture/scripts/anonymize.py *)",
+      "Bash(uv run --no-project python .claude/skills/ui-shots/scripts/shots.py*)",
+      "Bash(uv run --no-project python -m unittest discover -s .claude/tests*)",
+      "Bash(uvx ruff check .claude*)"
+    ],
+    "ask": [
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(uv run --no-project python .claude/skills/capture-fixture/scripts/fetch.py *)",
+      "WebFetch(domain:slack.com)",
+      "WebFetch(domain:graph.microsoft.com)",
+      "WebFetch(domain:*.atlassian.net)",
+      "WebFetch(domain:api.github.com)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [{ "type": "command",
+        "command": "uv run --no-project python \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_commit.py\"", "timeout": 30 }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "Edit|Write|MultiEdit", "hooks": [{ "type": "command",
+        "command": "uv run --no-project python \"$CLAUDE_PROJECT_DIR/.claude/hooks/dotnet_format_check.py\"",
+        "timeout": 90, "statusMessage": "dotnet format" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command",
+        "command": "cd \"$CLAUDE_PROJECT_DIR\" && uv run --no-project python .claude/hooks/checks_on_stop.py",
+        "timeout": 900, "statusMessage": "Build und Tests" }] }
+    ]
+  }
+}

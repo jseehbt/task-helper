@@ -1,6 +1,6 @@
 # SPEC: Aufgaben-Dashboard (Arbeitstitel „TaskHelper“)
 
-Stand: 2026-11-13 (nach Review überarbeitet) · Grundlage: [docs/aufgaben-dashboard.md](docs/aufgaben-dashboard.md) und Interview
+Stand: 2026-11-13 (nach Review und Issue-Abgleich überarbeitet) · Grundlage: [docs/aufgaben-dashboard.md](docs/aufgaben-dashboard.md) und Interview
 
 ## 1. Ziel und Abgrenzung
 
@@ -170,6 +170,8 @@ Markierte Mails werden **nicht** gefiltert; das Flag ist eine bewusste Handlung.
 - Scopes: `search:read`, `channels:read`, `channels:history`, `groups:read`, `groups:history`, `im:read`, `im:history`, `users:read`.
 - Das Token wird über den Token-Dialog im Credential Manager abgelegt.
 - Eigene User-ID, Team-ID und Workspace-URL werden per `auth.test` ermittelt.
+- Slack meldet Auth-Fehler mit HTTP 200 und `ok: false`. Die Fehlercodes `invalid_auth`, `not_authed`, `token_revoked`, `token_expired`, `account_inactive` und `missing_scope` führen zu `AuthRequired` (§7), andere `ok: false`-Antworten zu `Error`.
+- Benutzernamen (für Absender, aufgelöste Mentions im Titel) und die Merkmale `is_bot`/`deleted` kommen aus `users.info` und werden im Speicher gecacht (Lebensdauer: Prozess, höchstens 24 h). Unbekannte IDs werden einzeln nachgeladen.
 
 **Hinweis Rate-Limits:** Die seit 2025 verschärften Limits für `conversations.history`/`conversations.replies` gelten für kommerziell verteilte Apps außerhalb des Marketplace. Intern im Workspace erstellte Apps sind ausgenommen. Die App muss deshalb als interne App des eigenen Workspace angelegt werden. Unabhängig davon werden 429-Antworten mit `Retry-After` respektiert.
 
@@ -242,7 +244,9 @@ Markierte Mails werden **nicht** gefiltert; das Flag ist eine bewusste Handlung.
 
 **Dedup:** Ein PR, der zugewiesen ist und für den ein Review angefragt ist, ergibt ein Item mit beiden Reasons. Drafts werden angezeigt und markiert (`Flags.IsDraft`).
 
-**Vollständigkeit:** Liefert eine Suche `incomplete_results: true` (Timeout im Suchindex), gilt das Ergebnis als unvollständig (§4).
+**Paging:** Jede Suche mit `per_page=100`, weitere Seiten über den `Link`-Header (`rel="next"`). Ohne `per_page` liefert GitHub nur 30 Treffer; fehlende Treffer würden sonst als verschwunden gelten.
+
+**Vollständigkeit:** Liefert eine Suche `incomplete_results: true` (Timeout im Suchindex), gilt das Ergebnis als unvollständig (§4). Dasselbe gilt, wenn mehr als 1000 Treffer gemeldet werden (Obergrenze der Search-API).
 
 **Erledigt:** Das Item verschwindet, wenn das Issue oder der PR geschlossen ist, die Zuweisung entfernt wurde oder das Review abgegeben ist (GitHub entfernt den Review-Request dann).
 
@@ -290,6 +294,10 @@ Abgehakte Items sind über einen Filter „Abgehakte anzeigen“ im Flyout errei
 Jede Quelle hat einen Status: `Ok`, `Stale` (letzter Erfolg älter als 3 × Intervall), `Error` (letzter Poll fehlgeschlagen), `AuthRequired` (401/403/MSAL-UI-Required), `NotConfigured`, `Paused`.
 
 Treffen mehrere zu, gilt die Priorität `NotConfigured` > `AuthRequired` > `Error` > `Paused` > `Stale` > `Ok`. Während einer Pause wird eine Quelle also nie `Stale`.
+
+- `NotConfigured` gilt auch, wenn eine Quelle in der Config aktiviert ist, aber noch kein Token im Credential Manager liegt bzw. bei Outlook noch nie eine Anmeldung stattgefunden hat. Die Statuszeile zeigt dann „Token fehlt“ bzw. „Nicht angemeldet“ mit Link zum Token-Dialog; es gibt kein Fehler-Overlay im Tray.
+- `AuthRequired` setzt voraus, dass ein Token bzw. eine Anmeldung vorhanden war und von der Quelle abgelehnt wurde: HTTP 401/403 (GitHub, Jira, Graph), `MsalUiRequiredException` (Graph) oder die Slack-Fehlercodes aus §4.2.
+- Eine ungültige Config (§5) wird im Flyout als eigene Hinweiszeile mit Fehlertext und JSON-Pfad angezeigt.
 
 - **Im Flyout:** Pro Quelle Statuszeile mit „aktualisiert vor X min“. Bei Fehlern Warnsymbol und kurzer Fehlertext. Items einer Quelle im Status `Error`, `AuthRequired` oder `Stale` bleiben sichtbar, aber ausgegraut mit Hinweis „Stand von …“. Bei `Paused` werden Items normal angezeigt; der Hinweis „pausiert seit …“ steht in der Fußzeile.
 - **Tray-Icon:** Fehler-Overlay (siehe §8), sobald eine konfigurierte Quelle `Error`/`AuthRequired` hat.
@@ -441,7 +449,8 @@ Validierung beim Laden: Pflichtfelder je aktivierter Quelle, URL-Format, Uhrzeit
   - Config-Validierung
 - **HTTP** über einen Fake-`HttpMessageHandler`, kein echter Netzwerkverkehr in Tests.
 - **Gegen echte Konten:** Nur lesende Calls und nur nach ausdrücklicher Rückfrage beim Benutzer im Einzelfall, z. B. für den Spike zur Slack-Query-Syntax oder zum Erfassen von Fixtures. Fixtures werden vor dem Commit anonymisiert.
-- Vor „fertig“: `dotnet build` ohne Warnungen (Nullable aktiviert, `TreatWarningsAsErrors`), `dotnet format --verify-no-changes`, `dotnet test`.
+- **Setup-Doku:** Je Quelle eine kurze Anleitung (`docs/setup-*.md`), wie Zugang und Token eingerichtet werden (Entra-App, Slack-App mit Scopes, GitHub-PAT mit Berechtigungen, Jira-API-Token ohne Scopes).
+- Vor „fertig“ (gilt für jedes Issue): `dotnet build` ohne Warnungen (Nullable aktiviert, `TreatWarningsAsErrors`), `dotnet format --verify-no-changes`, `dotnet test`.
 
 ## 12. Vorbereitung auf firmenweite Verteilung
 
@@ -466,13 +475,14 @@ Nicht Teil von v1, aber bei Entwurfsentscheidungen zu berücksichtigen:
 | 6 | Abhaken + `updated_at` kann zu häufigem Wiederauftauchen führen | Beobachten, ggf. ChangeKey pro Quelle verfeinern |
 | 7 | Bestätigung der Dependencies MSAL (+ Broker/Extensions) und Testframework | Vor Projektsetup |
 | 8 | AppLocker/WDAC auf dem Firmenrechner blockiert evtl. schon in v1 eine unsignierte, selbst gebaute EXE im Benutzerprofil | Vor Projektsetup mit einer Test-EXE prüfen; sonst Code-Signing oder Freigabe vorziehen |
-| 9 | Die GitHub-Org verlangt evtl. eine Freigabe für fine-grained PATs oder sperrt sie | Org-Einstellung prüfen; Freigabe beantragen |
-| 10 | Jira: Scoped API-Tokens laufen nur über `api.atlassian.com/ex/jira/{cloudId}`; v1 unterstützt nur Tokens ohne Scopes | Prüfen, ob die Site Tokens ohne Scopes noch zulässt; sonst Adapter um den Gateway-Weg erweitern |
+| 9 | Die GitHub-Org verlangt evtl. eine Freigabe für fine-grained PATs oder sperrt sie | **Geklärt (2026-11-13):** Zugriff auf die GitHub-API ist in bestehenden Werkzeugen bereits im Einsatz |
+| 10 | Jira: Scoped API-Tokens laufen nur über `api.atlassian.com/ex/jira/{cloudId}`; v1 unterstützt nur Tokens ohne Scopes | **Geklärt (2026-11-13):** Zugriff auf die Jira-API ist in bestehenden Werkzeugen bereits im Einsatz |
 | 11 | Slack-Desktop-Deeplink auf eine einzelne Nachricht ist nicht offiziell dokumentiert | Im Slack-Spike prüfen; Fallback https-Permalink |
+| 12 | Outlook ist noch nicht praktisch erprobt: WAM-Anmeldung mit eigener App-Registrierung, Filter auf `inferenceClassification`, Verhalten bei Conditional Access | Machbarkeitstest vor dem Outlook-Adapter (lesend, nach Rückfrage) |
 
 ## 14. Umsetzungsreihenfolge (Vorschlag)
 
-0. **Klärungen vorab, parallel zu Schritt 1:** Risiken 1, 2, 8, 9 und 10 klären; Slack-Spike (Query-Syntax, Anzahl Calls für DMs, Deeplink; lesend, nach Rückfrage). Fällt eine Quelle weg oder ändert sich ihr Zugang, ändert sich der Zuschnitt.
+0. **Klärungen vorab, parallel zu Schritt 1:** Risiken 1, 2, 7, 8 und 12 klären (9 und 10 sind erledigt, GitHub und Jira gelten als machbar); Slack-Spike (Query-Syntax, Anzahl Calls für DMs, Deeplink; lesend, nach Rückfrage). Fällt eine Quelle weg oder ändert sich ihr Zugang, ändert sich der Zuschnitt. Slack und Outlook kommen bewusst zuletzt, weil sie noch nicht erprobt sind.
 1. Projektgerüst (Core/App/Tests), Config laden + validieren, Logging, SQLite-Schema **inklusive** lokalem Zustand und Lebenszyklus-Feldern (§3), auch wenn die Aktionen erst in Schritt 7 kommen
 2. Tray-Icon mit Zähler, Flyout mit statischen Daten, Ansicht/Sortierung umschaltbar
 3. Credential-Manager + Token-Dialog

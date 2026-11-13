@@ -96,7 +96,7 @@ SOURCES = {
 
 def repo_root() -> Path:
     out = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True,
-                         encoding="utf-8", check=False)
+                         encoding="utf-8", errors="replace", check=False)
     if out.returncode != 0:
         print("error=not_a_repository", file=sys.stderr)
         sys.exit(2)
@@ -105,7 +105,7 @@ def repo_root() -> Path:
 
 def tracked_files(root: Path) -> list[str]:
     out = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"],
-                         capture_output=True, text=True, encoding="utf-8", cwd=root, check=False)
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=root, check=False)
     return [p for p in out.stdout.splitlines() if p]
 
 
@@ -178,4 +178,6 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows pipes default to cp1252
+    sys.stderr.reconfigure(encoding="utf-8")
     sys.exit(main(sys.argv[1:]))

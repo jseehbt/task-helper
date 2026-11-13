@@ -10,7 +10,8 @@ open on focus loss.
 For each requested theme the script sets the per-user app colour mode
 (HKCU ...\\Themes\\Personalize\\AppsUseLightTheme), broadcasts the change, starts
 the app, waits for its windows, captures them with PrintWindow and ends the
-app. The original colour mode is restored in every case, also on errors.
+app. The original colour mode is restored in every case, also on errors; it
+is saved to a temp file first, so a run that gets killed is undone by the next.
 
 Usage (Windows only):
     uv run --no-project python shots.py [--exe PATH] [--out DIR] [--themes light,dark]
@@ -28,6 +29,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import json
 import shlex
 import struct
 import subprocess
@@ -42,6 +44,8 @@ PERSONALIZE = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
 THEME_VALUE = "AppsUseLightTheme"
 WINDOW_TIMEOUT_SECONDS = 20  # a cold start of a self-contained single-file exe unpacks first
 MIN_WINDOW_PIXELS = 20       # hidden helper windows (tray message window) are smaller or 0x0
+# The user's colour mode while a run has changed it; a killed run leaves it behind for the next one.
+PENDING_THEME = Path(tempfile.gettempdir()) / "taskhelper-shots-theme.json"
 
 
 # --- PNG (pure function, testable on any platform) ------------------------
@@ -185,6 +189,24 @@ def write_theme(value) -> None:
             winreg.SetValueEx(key, THEME_VALUE, 0, winreg.REG_DWORD, int(value))
 
 
+def recover_theme(desktop: Desktop) -> None:
+    """Restore the colour mode a killed earlier run (timeout, Ctrl+C) left behind."""
+    if not PENDING_THEME.is_file():
+        return
+    try:
+        original = json.loads(PENDING_THEME.read_text(encoding="utf-8")).get("original")
+        if original is not None and not isinstance(original, int):
+            raise ValueError(original)
+        write_theme(original)
+    except (ValueError, AttributeError, OSError):
+        PENDING_THEME.unlink(missing_ok=True)
+        print("warning=theme_not_recovered detail=saved colour mode unreadable; check Settings > Personalization")
+        return
+    desktop.broadcast_theme_change()
+    PENDING_THEME.unlink(missing_ok=True)
+    print(f"theme_recovered={original}")
+
+
 def find_exe(root: Path) -> Path | None:
     candidates = [p for p in root.glob("**/TaskHelper.App/bin/**/*.exe") if "TaskHelper" in p.name]
     return max(candidates, key=lambda p: p.stat().st_mtime) if candidates else None
@@ -250,7 +272,9 @@ def main(argv: list[str]) -> int:
     print(f"exe={exe.as_posix()} out={out.as_posix()}")
 
     desktop = Desktop()
+    recover_theme(desktop)
     original = read_theme()
+    PENDING_THEME.write_text(json.dumps({"original": original}), encoding="utf-8")
     status = 0
     try:
         for theme in themes:
@@ -261,9 +285,12 @@ def main(argv: list[str]) -> int:
     finally:
         write_theme(original)
         desktop.broadcast_theme_change()
+        PENDING_THEME.unlink(missing_ok=True)
         print(f"theme_restored={original}")
     return status
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows pipes default to cp1252
+    sys.stderr.reconfigure(encoding="utf-8")
     sys.exit(main(sys.argv[1:]))

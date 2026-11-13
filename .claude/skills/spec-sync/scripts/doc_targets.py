@@ -61,7 +61,7 @@ URL = re.compile(r"https?://[^\s)]+")
 
 
 def git(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", check=False)
+    return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
 
 
 def changed_files(base: str) -> list[str]:
@@ -117,7 +117,7 @@ def map_files(files: list[str], known_sections: set[str]) -> dict:
 
 def affected_issues(sections: set[str]) -> list[dict]:
     out = subprocess.run(["gh", "issue", "list", "--state", "open", "--limit", "500", "--json", "number,title,body"],
-                         capture_output=True, text=True, encoding="utf-8", check=False)
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     if out.returncode != 0:
         print(f"warning=gh_failed detail={out.stderr.strip()[:200]}", file=sys.stderr)
         return []
@@ -165,4 +165,6 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows pipes default to cp1252
+    sys.stderr.reconfigure(encoding="utf-8")
     sys.exit(main(sys.argv[1:]))

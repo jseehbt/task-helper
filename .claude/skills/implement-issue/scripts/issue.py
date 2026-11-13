@@ -63,7 +63,7 @@ def die(code: int, reason: str, detail: str = "") -> None:
 
 
 def run(cmd: list[str], check: bool = True) -> str:
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=False)
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     if check and result.returncode != 0:
         die(3, f"{cmd[0]}_failed", f"{' '.join(cmd[:4])}: {result.stderr.strip()}")
     return result.stdout
@@ -383,4 +383,6 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows pipes default to cp1252
+    sys.stderr.reconfigure(encoding="utf-8")
     sys.exit(main(sys.argv[1:]))

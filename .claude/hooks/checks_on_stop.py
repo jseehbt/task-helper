@@ -8,11 +8,16 @@ run, so a turn that changed nothing costs nothing):
 * .NET: `dotnet build` (warnings are errors) and `dotnet test`, when C#,
   XAML, project or fixture files differ from HEAD and a solution exists.
 * Tooling: the unittest suite in .claude/tests, when a Python file under
-  .claude changed.
+  .claude, a SKILL.md, .claude/settings.json or SPEC.md changed (the tests
+  read them).
+
+Build output (bin/, obj/, TestResults/) never counts as a change, otherwise
+every build would invalidate the stored hash.
 
 A failure exits 2, which makes Claude continue and fix it; stop_hook_active
-prevents a loop. A missing tool is reported to the user, not to Claude - it
-is not a test failure.
+prevents a loop. A missing tool or .NET SDK is reported to the user, not to
+Claude - it is not a test failure. The step timeouts add up to 960 s; the
+hook timeout in .claude/settings.json must stay above that.
 """
 
 from __future__ import annotations
@@ -25,21 +30,33 @@ import subprocess
 import sys
 from pathlib import Path
 
-DOTNET_FILES = re.compile(r"\.(cs|xaml|csproj|props|targets|slnx?|json|resx)$|(^|/)\.editorconfig$", re.IGNORECASE)
-TOOLING_FILES = re.compile(r"^\.claude/.*\.py$")
+# Everything under .claude/ is agent tooling, never part of the .NET build.
+DOTNET_FILES = re.compile(r"^(?!\.claude/)(.*\.(cs|xaml|csproj|props|targets|slnx?|json|resx)|(.*/)?\.editorconfig)$",
+                          re.IGNORECASE)
+TOOLING_FILES = re.compile(r"^(\.claude/.*\.py|\.claude/skills/.*\.md|\.claude/settings\.json|SPEC\.md)$")
+BUILD_OUTPUT = re.compile(r"(^|/)(bin|obj|TestResults)/", re.IGNORECASE)
 BUILD_TIMEOUT = 420
 TEST_TIMEOUT = 420
 TOOLING_TIMEOUT = 120
 
 
 def git(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], capture_output=True, check=False)
+    return subprocess.run(["git", "-c", "core.quotepath=false", *args], capture_output=True, check=False)
+
+
+def has_dotnet_sdk() -> bool:
+    """`which dotnet` also finds the bare host, which cannot build anything."""
+    if shutil.which("dotnet") is None:
+        return False
+    out = subprocess.run(["dotnet", "--list-sdks"], capture_output=True, check=False)
+    return out.returncode == 0 and bool(out.stdout.strip())
 
 
 def changed(pattern: re.Pattern) -> list[str]:
-    tracked = git("diff", "--name-only", "HEAD").stdout.decode("utf-8").splitlines()
-    untracked = git("ls-files", "--others", "--exclude-standard").stdout.decode("utf-8").splitlines()
-    return sorted(p for p in set(tracked) | set(untracked) if p and pattern.search(p))
+    tracked = git("diff", "--name-only", "HEAD").stdout.decode("utf-8", errors="replace").splitlines()
+    untracked = git("ls-files", "--others", "--exclude-standard").stdout.decode("utf-8", errors="replace").splitlines()
+    return sorted(p for p in set(tracked) | set(untracked)
+                  if p and pattern.search(p) and not BUILD_OUTPUT.search(p))
 
 
 def fingerprint(files: list[str]) -> str:
@@ -78,8 +95,8 @@ def check_dotnet(messages: list[str], notes: list[str]) -> None:
     files = changed(DOTNET_FILES)
     if not files or not any(Path(".").glob("*.sln*")) or is_green("claude-dotnet-green", files):
         return
-    if shutil.which("dotnet") is None:
-        notes.append("Build/Tests nicht gelaufen: dotnet nicht gefunden.")
+    if not has_dotnet_sdk():
+        notes.append("Build/Tests nicht gelaufen: kein .NET SDK gefunden (dotnet --list-sdks).")
         return
     ok, output = run(["dotnet", "build", "--nologo", "-v", "q"], BUILD_TIMEOUT)
     if not ok:
@@ -124,4 +141,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8")  # hook JSON is UTF-8; Windows pipes default to cp1252
     sys.exit(main())

@@ -81,7 +81,8 @@ pass its path: quotes, umlauts and line breaks then survive on Windows.
 
 * Never commit on `main`, never push or open a pull request without the user's go - a pushed branch is visible to everyone with repository access.
 * Change issues only through `tick`, `overview` and `comment`: never untick, rewrite a body, close an issue or edit the R items in #2. Those are the
-  user's decisions.
+  user's decisions. `.claude/settings.json` allows only `next`, `show`, `spec` and `branch` without a prompt; the three writing subcommands ask
+  each time, because what they post is visible to everyone with repository access.
 * No tokens, real names, mail subjects or message texts in comments, commits or fixtures - issues are readable by everyone with access, and
   SPEC §3 forbids content outside the local database.
 

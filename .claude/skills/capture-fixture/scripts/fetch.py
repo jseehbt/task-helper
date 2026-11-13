@@ -22,7 +22,8 @@ adapters read). OUT_DIR must lie outside the repository.
 Exit codes:
     0  saved
     2  usage error (host not allowed, OUT_DIR inside the repository, missing --email)
-    3  HTTP error or Slack ok:false (status printed, body not)
+    3  HTTP error, redirect (refused, so the token never reaches another host)
+       or Slack ok:false (status printed, body not)
     4  not on Windows, or no credential stored for the source
 """
 
@@ -69,22 +70,32 @@ def read_credential(target: str) -> str | None:
         return None
     try:
         cred = pointer.contents
-        blob = ctypes.string_at(cred.CredentialBlob, cred.CredentialBlobSize)
-        # .NET's CredWrite with a string blob stores UTF-16; a UTF-8 blob also occurs.
-        try:
-            text = blob.decode("utf-16-le")
-            if text.isprintable():
-                return text
-        except UnicodeDecodeError:
-            pass
-        return blob.decode("utf-8")
+        return decode_blob(ctypes.string_at(cred.CredentialBlob, cred.CredentialBlobSize))
     finally:
         advapi.CredFree(pointer)
 
 
+def decode_blob(blob: bytes) -> str:
+    """A credential blob as text: UTF-16LE (.NET/Windows default) or UTF-8.
+
+    Tokens are ASCII, so a UTF-16LE blob has a zero in every odd byte; a UTF-8
+    blob of even length would otherwise decode to printable CJK characters.
+    """
+    if blob and len(blob) % 2 == 0 and all(b == 0 for b in blob[1::2]):
+        return blob.decode("utf-16-le")
+    return blob.decode("utf-8")
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects: urllib would resend the Authorization header to the new host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def inside_repo(path: Path) -> bool:
     out = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True,
-                         encoding="utf-8", check=False)
+                         encoding="utf-8", errors="replace", check=False)
     if out.returncode != 0:
         return False
     root = Path(out.stdout.strip()).resolve()
@@ -126,11 +137,13 @@ def main(argv: list[str]) -> int:
         auth = f"Bearer {token}"
     request = urllib.request.Request(args.url, method="GET", headers={
         "Authorization": auth, "Accept": "application/json", "User-Agent": "TaskHelper-fixture-capture"})
+    opener = urllib.request.build_opener(NoRedirect)
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+        with opener.open(request, timeout=TIMEOUT_SECONDS) as response:
             status, headers, body = response.status, response.headers, response.read()
     except urllib.error.HTTPError as exc:
-        print(f"error=http_status detail={exc.code}", file=sys.stderr)
+        hint = " redirect refused; call the target URL directly" if 300 <= exc.code < 400 else ""
+        print(f"error=http_status detail={exc.code}{hint}", file=sys.stderr)
         return 3
 
     data = json.loads(body.decode("utf-8"))
@@ -148,4 +161,6 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows pipes default to cp1252
+    sys.stderr.reconfigure(encoding="utf-8")
     sys.exit(main(sys.argv[1:]))

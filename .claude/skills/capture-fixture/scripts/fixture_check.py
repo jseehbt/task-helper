@@ -14,7 +14,7 @@ Usage:
 
 Exit codes:
     0  nothing found
-    2  usage error (path not found)
+    2  usage error (path not found, deny list neither UTF-8 nor UTF-16)
     3  findings, one `finding=` line each
 
 The guard_commit hook imports `scan_text` from here.
@@ -40,14 +40,18 @@ SECRET_PATTERNS = {
     "bearer_header": re.compile(r"(?i)\b(?:authorization|bearer)\b[\"']?\s*[:=]?\s*[\"']?(?:bearer|basic)\s+[A-Za-z0-9+/=._-]{16,}"),
 }
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)")
-HOST = re.compile(r"https?://([A-Za-z0-9.-]+)")
+# Tenant-looking host names, with or without a scheme (an e-mail domain is not a host).
+HOST = re.compile(r"(?<![A-Za-z0-9@.-])((?:[A-Za-z0-9-]+\.)+(?:slack\.com|atlassian\.net|jira\.com|sharepoint\.com))"
+                  r"(?![A-Za-z0-9-])", re.IGNORECASE)
 # Domains reserved for examples (RFC 2606) plus the vendors' own service
 # addresses, which identify no customer.
 EXAMPLE_DOMAIN = re.compile(r"(?:^|\.)(?:example\.(?:com|org|net)|invalid|example|test|localhost)$", re.IGNORECASE)
 SERVICE_EMAIL_DOMAINS = {"users.noreply.github.com", "noreply.github.com"}
 # Hosts whose first label names a real tenant unless it is the placeholder.
-TENANT_HOST = re.compile(r"^([A-Za-z0-9-]+)\.(slack\.com|atlassian\.net|sharepoint\.com)$", re.IGNORECASE)
-TENANT_PLACEHOLDERS = {"example", "app", "api", "files", "hooks", "slack", "www"}
+# The tenant is the label in front of the vendor domain (Slack Enterprise Grid: in front of `enterprise.`).
+TENANT_HOST = re.compile(r"^(?:[A-Za-z0-9-]+\.)*?([A-Za-z0-9-]+)\.(?:enterprise\.)?"
+                         r"(slack\.com|atlassian\.net|jira\.com|sharepoint\.com)$", re.IGNORECASE)
+TENANT_PLACEHOLDERS = {"example", "app", "api", "files", "hooks", "slack", "www", "enterprise"}
 FIXTURE_DIR = re.compile(r"(^|/)(fixtures?)(/|$)", re.IGNORECASE)
 TEXT_SUFFIXES = {".json", ".jsonc", ".txt", ".md", ".cs", ".xml", ".xaml", ".http", ".yml", ".yaml", ".config",
                  ".csproj", ".props", ".py", ".ps1", ".cmd", ".sh"}
@@ -58,11 +62,23 @@ def load_denylist(root: Path) -> list[str]:
     if not path.is_file():
         return []
     terms = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in decode_denylist(path.read_bytes(), path).splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
             terms.append(line)
     return terms
+
+
+def decode_denylist(data: bytes, path: Path) -> str:
+    """UTF-8 with or without BOM, or UTF-16 as PowerShell 5 writes it (`>`, Out-File)."""
+    try:
+        if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+            return data.decode("utf-16")
+        if b"\x00" in data:
+            return data.decode("utf-16-le")
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.as_posix()} is neither UTF-8 nor UTF-16; save it as UTF-8") from exc
 
 
 def mask(value: str) -> str:
@@ -97,13 +113,13 @@ def scan_text(text: str, denylist: list[str], secrets_only: bool = False) -> lis
 
 def repo_root() -> Path:
     out = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True,
-                         encoding="utf-8", check=False)
+                         encoding="utf-8", errors="replace", check=False)
     return Path(out.stdout.strip()) if out.returncode == 0 else Path.cwd()
 
 
 def default_targets(root: Path) -> list[Path]:
     out = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"],
-                         capture_output=True, text=True, encoding="utf-8", cwd=root, check=False)
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=root, check=False)
     return [root / p for p in out.stdout.splitlines() if FIXTURE_DIR.search(p)]
 
 
@@ -127,7 +143,11 @@ def main(argv: list[str]) -> int:
                         help="only tokens and deny-list terms, not e-mails or hosts")
     args = parser.parse_args(argv)
     root = repo_root()
-    denylist = load_denylist(root)
+    try:
+        denylist = load_denylist(root)
+    except ValueError as exc:
+        print(f"error=denylist_encoding detail={exc}", file=sys.stderr)
+        return 2
     files = expand(args.paths) if args.paths else expand(default_targets(root))
     total = 0
     for file in files:
@@ -143,4 +163,6 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows pipes default to cp1252
+    sys.stderr.reconfigure(encoding="utf-8")
     sys.exit(main(sys.argv[1:]))

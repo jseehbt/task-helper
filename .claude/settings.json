@@ -1,7 +1,11 @@
 {
+  "env": { "PYTHONUTF8": "1" },
   "permissions": {
     "allow": [
-      "Bash(uv run --no-project python .claude/skills/implement-issue/scripts/issue.py *)",
+      "Bash(uv run --no-project python .claude/skills/implement-issue/scripts/issue.py next*)",
+      "Bash(uv run --no-project python .claude/skills/implement-issue/scripts/issue.py show *)",
+      "Bash(uv run --no-project python .claude/skills/implement-issue/scripts/issue.py spec *)",
+      "Bash(uv run --no-project python .claude/skills/implement-issue/scripts/issue.py branch *)",
       "Bash(uv run --no-project python .claude/skills/review-branch/scripts/route_reviewers.py*)",
       "Bash(uv run --no-project python .claude/skills/spec-sync/scripts/doc_targets.py*)",
       "Bash(uv run --no-project python .claude/skills/add-source-adapter/scripts/adapter_coverage.py *)",
@@ -34,7 +38,7 @@
     "Stop": [
       { "hooks": [{ "type": "command",
         "command": "cd \"$CLAUDE_PROJECT_DIR\" && uv run --no-project python .claude/hooks/checks_on_stop.py",
-        "timeout": 900, "statusMessage": "Build und Tests" }] }
+        "timeout": 1000, "statusMessage": "Build und Tests" }] }
     ]
   }
 }

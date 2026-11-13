@@ -4,3 +4,7 @@
 .claude/settings.local.json
 # Python-Bytecode der Agent-Skripte
 __pycache__/
+# Build- und Testausgabe von dotnet
+bin/
+obj/
+TestResults/

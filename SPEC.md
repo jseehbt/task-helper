@@ -482,7 +482,7 @@ Nicht Teil von v1, aber bei Entwurfsentscheidungen zu berücksichtigen:
 
 ## 14. Umsetzungsreihenfolge (Vorschlag)
 
-0. **Klärungen vorab, parallel zu Schritt 1:** Risiken 1, 2, 7, 8 und 12 klären (9 und 10 sind erledigt, GitHub und Jira gelten als machbar); Slack-Spike (Query-Syntax, Anzahl Calls für DMs, Deeplink; lesend, nach Rückfrage). Fällt eine Quelle weg oder ändert sich ihr Zugang, ändert sich der Zuschnitt. Slack und Outlook kommen bewusst zuletzt, weil sie noch nicht erprobt sind.
+0. **Klärungen vorab, parallel zu Schritt 1:** Risiken 1, 2, 8 und 12 klären (7, 9 und 10 sind erledigt, GitHub und Jira gelten als machbar); Slack-Spike (Query-Syntax, Anzahl Calls für DMs, Deeplink; lesend, nach Rückfrage). Fällt eine Quelle weg oder ändert sich ihr Zugang, ändert sich der Zuschnitt. Slack und Outlook kommen bewusst zuletzt, weil sie noch nicht erprobt sind.
 1. Projektgerüst (Core/App/Tests), Config laden + validieren, Logging, SQLite-Schema **inklusive** lokalem Zustand und Lebenszyklus-Feldern (§3), auch wenn die Aktionen erst in Schritt 7 kommen
 2. Tray-Icon mit Zähler, Flyout mit statischen Daten, Ansicht/Sortierung umschaltbar
 3. Credential-Manager + Token-Dialog

@@ -87,14 +87,18 @@ melden nur, die Hauptsession ändert den Code.
 
 Die Hooks sind in `.claude/settings.json` eingetragen, die Skripte liegen in [.claude/hooks/](.claude/hooks/):
 
-- `dotnet_format_check.py` (nach Edit/Write einer `.cs`-Datei): meldet Whitespace-Formatfehler und ändert nichts.
-- `checks_on_stop.py` (Stop): einmal je Änderungsstand `dotnet build` + `dotnet test` und die Tests der Agent-Skripte.
-- `guard_commit.py` (vor `git commit`): blockiert Commits auf `main`, Co-Author-Footer, Tokens und Namen aus der Denylist sowie echte E-Mails
-  und Tenant-Hosts in Fixtures.
-- Zusätzlich fragen `ask`-Regeln vor `curl`/`wget` und vor WebFetch auf die API-Hosts nach.
+- `dotnet_format_check.py` (nach Edit/Write einer `.cs`-Datei): meldet Whitespace-Formatfehler und ändert nichts. Ohne .NET SDK schweigt er.
+- `checks_on_stop.py` (Stop): einmal je Änderungsstand `dotnet build` + `dotnet test` und die Tests der Agent-Skripte. `bin/`, `obj/` und
+  `TestResults/` zählen nicht als Änderung.
+- `guard_commit.py` (vor `git commit`, auch `git -C …`/`git -c …` und `git add … && git commit`): blockiert Commits auf `main`,
+  Co-Author-Footer (auch in `-F`-Dateien), Tokens und Namen aus der Denylist sowie echte E-Mails und Tenant-Hosts in Fixtures. Kann er nicht
+  prüfen, blockiert er.
+- `settings.json` setzt `PYTHONUTF8=1`, damit die Skripte unter Windows UTF-8 ausgeben.
+- Zusätzlich fragen `ask`-Regeln vor `curl`/`wget`, vor `fetch.py` und vor WebFetch auf die API-Hosts nach. `issue.py` ist nur für `next`,
+  `show`, `spec` und `branch` freigegeben; `tick`, `overview` und `comment` schreiben auf GitHub und fragen jedes Mal.
 
 ### Passende globale Skills
 
-- `hbt-skill-creator`: Projekt-Skills ändern. `check_skill.py --strict` muss für `.claude/skills` grün sein.
+- `hbt-skill-creator`: Projekt-Skills ändern. `check_skill.py --strict` (im Repo-Root, ohne Pfad) muss grün sein.
 - `code-review` und `security-review` ergänzen `review-branch`.
 - `hbt-github-action-creator`: für eine spätere CI.

@@ -42,8 +42,9 @@ HINTS = [
     ("ui-shots", re.compile(r"\.xaml$|(^|/)TaskHelper\.App/.*(Tray|Flyout|Icon|Theme|Dialog)[^/]*\.cs$"),
      "UI changed: run the ui-shots skill, then the ui-reviewer agent with the screenshots"),
     ("check_skill", re.compile(r"^\.claude/(skills|agents)/"),
-     "skills/agents changed: hbt-skill-creator check_skill.py --strict on .claude/skills"),
-    ("tooling_tests", re.compile(r"^\.claude/.*\.py$"),
+     ("skills/agents changed: hbt-skill-creator check_skill.py --strict from the repository root, without a path "
+      "(a path means one skill)")),
+    ("tooling_tests", re.compile(r"^(\.claude/.*\.py|\.claude/skills/.*\.md|\.claude/settings\.json|SPEC\.md)$"),
      "uvx ruff check .claude && uv run --no-project python -m unittest discover -s .claude/tests"),
     ("github_actions", re.compile(r"^\.github/workflows/"),
      "workflow changed: review with the hbt-github-action-creator skill (actionlint, zizmor)"),
@@ -55,7 +56,7 @@ IGNORED = re.compile(r"(^|/)(bin|obj)/|\.(png|ico|jpg|gif|dll|exe)$", re.IGNOREC
 
 
 def git(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", check=False)
+    return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
 
 
 def changed_files(base: str) -> list[str]:
@@ -109,4 +110,6 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows pipes default to cp1252
+    sys.stderr.reconfigure(encoding="utf-8")
     sys.exit(main(sys.argv[1:]))

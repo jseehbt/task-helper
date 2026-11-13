@@ -1,6 +1,6 @@
 # SPEC: Aufgaben-Dashboard (Arbeitstitel „TaskHelper“)
 
-Stand: 2026-11-13 (nach Review und Issue-Abgleich überarbeitet) · Grundlage: [docs/aufgaben-dashboard.md](docs/aufgaben-dashboard.md) und Interview
+Stand: 2026-11-13 (nach Review und Issue-Abgleich überarbeitet; Dependencies R7 bestätigt) · Grundlage: [docs/aufgaben-dashboard.md](docs/aufgaben-dashboard.md) und Interview
 
 ## 1. Ziel und Abgrenzung
 
@@ -51,9 +51,9 @@ Auch wenn unter Windows entwickelt wird, wird die Logik von der UI getrennt, dam
 | Paket | Zweck | Status |
 |---|---|---|
 | `Microsoft.Data.Sqlite` | Persistenz | im Interview bestätigt |
-| `Microsoft.Identity.Client` | Graph-Login (MSAL, Public Client) | Bestätigung offen, praktisch alternativlos |
-| `Microsoft.Identity.Client.Broker` | Login über WAM (Windows-Konto, SSO, OS-verwaltete Tokens) | Bestätigung offen; Alternative: `Microsoft.Identity.Client.Extensions.Msal` für einen verschlüsselten Token-Cache |
-| Testframework (z. B. xUnit) | Tests | Bestätigung offen |
+| `Microsoft.Identity.Client` | Graph-Login (MSAL, Public Client) | bestätigt (2026-11-13) |
+| `Microsoft.Identity.Client.Broker` | Login über WAM (Windows-Konto, SSO, OS-verwaltete Tokens) | bestätigt (2026-11-13) |
+| xUnit | Tests | bestätigt (2026-11-13) |
 
 Tray-Icon über `System.Windows.Forms.NotifyIcon` (`UseWindowsForms=true`), damit kein zusätzliches Paket nötig ist. JSON über `System.Text.Json`, Logging mit einem eigenen kleinen Datei-Logger statt `Microsoft.Extensions.Logging`, solange nicht anders gewünscht.
 
@@ -473,7 +473,7 @@ Nicht Teil von v1, aber bei Entwurfsentscheidungen zu berücksichtigen:
 | 4 | Anzahl der Calls für DMs bei vielen Konversationen | Spike messen; ggf. DMs mit `is_open=false` ausklammern |
 | 5 | Outlook-Desktop-Deeplink über EntryID funktioniert nur mit klassischem Outlook | Default Browser, Desktop optional mit Fallback |
 | 6 | Abhaken + `updated_at` kann zu häufigem Wiederauftauchen führen | Beobachten, ggf. ChangeKey pro Quelle verfeinern |
-| 7 | Bestätigung der Dependencies MSAL (+ Broker/Extensions) und Testframework | Vor Projektsetup |
+| 7 | Bestätigung der Dependencies MSAL (+ Broker/Extensions) und Testframework | **Geklärt (2026-11-13):** `Microsoft.Identity.Client`, `Microsoft.Identity.Client.Broker` und xUnit bestätigt |
 | 8 | AppLocker/WDAC auf dem Firmenrechner blockiert evtl. schon in v1 eine unsignierte, selbst gebaute EXE im Benutzerprofil | Vor Projektsetup mit einer Test-EXE prüfen; sonst Code-Signing oder Freigabe vorziehen |
 | 9 | Die GitHub-Org verlangt evtl. eine Freigabe für fine-grained PATs oder sperrt sie | **Geklärt (2026-11-13):** Zugriff auf die GitHub-API ist in bestehenden Werkzeugen bereits im Einsatz |
 | 10 | Jira: Scoped API-Tokens laufen nur über `api.atlassian.com/ex/jira/{cloudId}`; v1 unterstützt nur Tokens ohne Scopes | **Geklärt (2026-11-13):** Zugriff auf die Jira-API ist in bestehenden Werkzeugen bereits im Einsatz |
